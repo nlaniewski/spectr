@@ -4,19 +4,20 @@
 #' Plot a normalized spectral signature for spectral flow cytometry reference controls.
 #'
 #' @param raw.fluor.control.path Character string; file path to a spectral flow cytometry reference (fluor) control.
-#' @param raw.unstained.control.path Character string; file path to a spectral flow cytometry reference (unstained, universal) control.
+#' @param raw.unstained.control.path Character string; file path to a spectral flow cytometry reference (unstained, universal) control to be used for signal (auto fluorescence) subtraction. If `NULL`, an internal negative/unstained population will used.
 #' @param transform.type Character string; default and only current choice is 'asinh' for arc-sine transformation of fluorescence detectors.
 #' @param cofactor Numeric; default 5000. Defines the cofactor value used during arc-sine transformation of fluorescence detectors.
 #' @param top.n Numeric; default 200. Defines the top number of expressing events (peak detector) to use when generating the normalized median values.
 #'
 #' @return A \link[ggplot2]{ggplot} object.
 #' @export
+#' @references https://github.com/hally166/flowSpectrum/
 #'
 #' @examples
-#' raw.fluor.control.path<-list.files(
+#' raw.fluor.control.paths<-list.files(
 #' system.file("extdata",package="spectr"),
 #' full.names = TRUE,
-#' pattern = "RB744"
+#' pattern = "RB744|PerCPFire806"
 #' )
 #'
 #' raw.unstained.control.path<-list.files(
@@ -25,41 +26,61 @@
 #' pattern = "Unstained"
 #' )
 #'
-#' spectral.signature(
-#' raw.fluor.control.path,
+#' ##spectral signatures using universal negative/unstained for signal subtraction
+#' p.universal<-lapply(
+#' raw.fluor.control.paths,
+#' spectral.signature,
 #' raw.unstained.control.path
 #' )
 #'
-#' raw.fluor.control.path<-list.files(
-#' system.file("extdata",package="spectr"),
-#' full.names = TRUE,
-#' pattern = "PerCPFire806"
+#' ##spectral signatures using internal negative/unstained for signal subtraction
+#' p.internal<-lapply(
+#' raw.fluor.control.paths,
+#' spectral.signature,
+#' raw.unstained.control.path=NULL
 #' )
 #'
-#' spectral.signature(
-#' raw.fluor.control.path,
-#' raw.unstained.control.path
-#' )
+#' ##CD3 RB744
+#' p.universal[[1]] +
+#' ggplot2::labs(caption="Universal negative/unstained used for signal subtraction.")
+#' p.internal[[1]] +
+#' ggplot2::labs(caption="Internal negative/unstained used for signal subtraction.")
+#'
+#' ##CD4 PerCPFire806
+#' p.universal[[2]] +
+#' ggplot2::labs(caption="Universal negative/unstained used for signal subtraction.")
+#' p.internal[[2]] +
+#' ggplot2::labs(caption="Internal negative/unstained used for signal subtraction.")
+#'
+#'
 spectral.signature<-function(
     raw.fluor.control.path,
     raw.unstained.control.path,
     transform.type='asinh',
     cofactor=5000,
     top.n=200){
+  ##to silence NSE R CMD check notes
+  FSC_A<-SSC_A<-detector<-normalized.expression<-NULL
+
   ##https://github.com/hally166/flowSpectrum/
   ##normalized spectral signatures
 
   ##get .fcs text/keywords
   fcs.kw<-as.list(flowCore::read.FCSheader(raw.fluor.control.path)[[1]])
-  fcs.kw.meta<-fcs.kw[grep('INST$|CYT|CYTSN|CREATOR|PROJ|TUBENAME',names(fcs.kw))]
+  fcs.kw.meta<-fcs.kw[grep('CYT|CYTSN|CREATOR|PROJ|TUBENAME',names(fcs.kw))]
   if(!any(unlist(unique(fcs.kw[grep("\\$P[0-9]+TYPE",names(fcs.kw))])) %in% "Raw_Fluorescence")){
     stop("'Raw_Fluorescence' ($P#TYPE) channels not detected; is this a reference control file (raw not unmixed)?")
   }
-  ##read .fcs data; convert to data.table
+  ##list file paths
   dts<-list(
     'fluor'=raw.fluor.control.path,
-    'unstained'=raw.unstained.control.path
+    'unstained'=if(!is.null(raw.unstained.control.path)){
+      raw.unstained.control.path
+    }
   )
+  ##if raw.unstained.control.path is not-defined, drop
+  dts<-dts[!sapply(dts,is.null)]
+  ##read .fcs data; convert to data.table
   dts<-lapply(dts,function(fcs.path){
     data.table::as.data.table(
       flowCore::read.FCS(
@@ -100,7 +121,7 @@ spectral.signature<-function(
     ##peak cuts to select bounds
     low.cut<-mean(d$y[1:(peak.i-1)])
     low.cut.x<-d$x[d$y>low.cut][1]
-    ##reflect the low cut
+    ##mirror the low cut
     high.cut.x<-peak.x+(peak.x-low.cut.x)
     return(c(low.cut.x,high.cut.x))
   }
@@ -119,8 +140,29 @@ spectral.signature<-function(
   detector.index<-dts$fluor[,.I[get(detector.max)>=sort(get(detector.max),decreasing = T)[top.n]]]
   ##per-detector medians; top.n events; fluor
   dt.medians<-dts$fluor[detector.index,lapply(.SD,stats::median),.SDcols = detectors.fluors]
-  ##per-detector medians; unstained
-  dt.medians.unstained<-dts$unstained[,lapply(.SD,stats::median),.SDcols = detectors.fluors]
+  ##per-detector medians; negative/unstained; to subtract (auto fluorescence)
+  if(!is.null(raw.unstained.control.path)){
+    ##per-detector medians; unstained; universal
+    dt.medians.unstained<-dts$unstained[,lapply(.SD,stats::median),.SDcols = detectors.fluors]
+  }else{
+    ##per-detector medians; negative/unstained; internal
+    ##200 events centered over negative/unstained peak
+    d<-dts$fluor[,stats::density(get(detector.max))]
+
+    d.derivative.1<-diff(d$y)
+    d.derivative.2<-diff(sign(d.derivative.1))
+    peaks<-which(d.derivative.2==(-2))+1
+    peak1<-d$x[peaks[1]]
+    bound1<-dts$fluor[,sort(get(detector.max)[get(detector.max)<peak1],decreasing = T)[(top.n/2)]]
+    bound2<-dts$fluor[,sort(get(detector.max)[get(detector.max)>peak1],decreasing = F)[(top.n/2)]]
+
+    # plot(d)
+    # abline(v=peak1,col="blue"))
+
+    dt.medians.unstained<-dts$fluor[data.table::between(get(detector.max),bound1,bound2),
+                                    lapply(.SD,stats::median),
+                                    .SDcols = detectors.fluors]
+  }
   ##subtract unstained medians from fluor
   dt.medians<-(dt.medians)-(dt.medians.unstained)
   ##medians normalized to max median

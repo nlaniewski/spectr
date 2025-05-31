@@ -1,6 +1,6 @@
 Package: spectr
 Title: Full Specturm Flow Cytometry Analysis Tools
-Version: 0.0.1
+Version: 0.0.2
 Authors@R: 
     person("Nathan", "Laniewski", , "nathan_laniewski@urmc.rochester.edu", role = c("aut", "cre"))
 Description: Analysis and visualization of full spectrum flow cytometry .fcs data.
@@ -8,11 +8,14 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 License: GPL (>= 3)
+biocViews:
 Imports:
+    Biobase,
     data.table,
     flowCore,
     ggplot2,
-    stats
-biocViews:
+    methods,
+    stats,
+    stringr
 URL: https://github.com/nlaniewski/spectr
 BugReports: https://github.com/nlaniewski/spectr/issues

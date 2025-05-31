@@ -15,7 +15,7 @@ spectral.signature(
 \arguments{
 \item{raw.fluor.control.path}{Character string; file path to a spectral flow cytometry reference (fluor) control.}
 
-\item{raw.unstained.control.path}{Character string; file path to a spectral flow cytometry reference (unstained) control.}
+\item{raw.unstained.control.path}{Character string; file path to a spectral flow cytometry reference (unstained, universal) control to be used for signal (auto fluorescence) subtraction. If \code{NULL}, an internal negative/unstained population will used.}
 
 \item{transform.type}{Character string; default and only current choice is 'asinh' for arc-sine transformation of fluorescence detectors.}
 
@@ -30,10 +30,10 @@ A \link[ggplot2]{ggplot} object.
 Plot a normalized spectral signature for spectral flow cytometry reference controls.
 }
 \examples{
-raw.fluor.control.path<-list.files(
+raw.fluor.control.paths<-list.files(
 system.file("extdata",package="spectr"),
 full.names = TRUE,
-pattern = "RB744"
+pattern = "RB744|PerCPFire806"
 )
 
 raw.unstained.control.path<-list.files(
@@ -42,19 +42,34 @@ full.names = TRUE,
 pattern = "Unstained"
 )
 
-spectral.signature(
-raw.fluor.control.path,
+##spectral signatures using universal negative/unstained for signal subtraction
+p.universal<-lapply(
+raw.fluor.control.paths,
+spectral.signature,
 raw.unstained.control.path
 )
 
-raw.fluor.control.path<-list.files(
-system.file("extdata",package="spectr"),
-full.names = TRUE,
-pattern = "PerCPFire806"
+##spectral signatures using internal negative/unstained for signal subtraction
+p.internal<-lapply(
+raw.fluor.control.paths,
+spectral.signature,
+raw.unstained.control.path=NULL
 )
 
-spectral.signature(
-raw.fluor.control.path,
-raw.unstained.control.path
-)
+##CD3 RB744
+p.universal[[1]] +
+ggplot2::labs(caption="Universal negative/unstained used for signal subtraction.")
+p.internal[[1]] +
+ggplot2::labs(caption="Internal negative/unstained used for signal subtraction.")
+
+##CD4 PerCPFire806
+p.universal[[2]] +
+ggplot2::labs(caption="Universal negative/unstained used for signal subtraction.")
+p.internal[[2]] +
+ggplot2::labs(caption="Internal negative/unstained used for signal subtraction.")
+
+
+}
+\references{
+https://github.com/hally166/flowSpectrum/
 }
