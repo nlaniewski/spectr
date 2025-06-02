@@ -2,7 +2,9 @@ concatenate.test<-function(fcs.file.paths){
   keywords<-get.keywords(fcs.file.paths)
   dt.parameters.split<-split(keywords[['parameters']],by='PROJ')
   dt.NS<-unique(
-    lapply(dt.parameters.split,function(dt.parameters){dt.parameters[,.(N,S)]})
+    lapply(dt.parameters.split,function(dt.parameters){
+      dt.parameters[,.SD,.SDcols = grep('N|S',names(dt.parameters))]
+    })
   )
   if(length(dt.NS)!=1){
     discrepancy<-sapply(c('N','S'),function(j){
@@ -33,8 +35,10 @@ concatenate.test<-function(fcs.file.paths){
   }else{
     dt.NS<-dt.NS[[1]]
   }
-  if(dt.NS[!is.na(S),data.table::uniqueN(S)!=.N]){
-    stop("Non-unique '$PS' names")
+  if('S' %in% names(dt.NS)){
+    if(dt.NS[!is.na(S),data.table::uniqueN(S)!=.N]){
+      stop("Non-unique '$PS' names")
+    }
   }else{
     return(keywords)
   }
@@ -47,7 +51,7 @@ prepare.channel.alias<-function(
   ##to silence NSE R CMD check notes
 
   ##
-  channel_alias<-unique(dt.parameters[,.(N,S)])
+  channel_alias<-unique(dt.parameters[,.SD,.SDcols = grep('N|S',names(dt.parameters))])
   ##
   if(colnames.syntatically.valid){
     channel_alias[!grepl("[FS]SC|Time",N),N.alias:=gsub(" |-","",sub("-A$","",N))]
@@ -56,9 +60,11 @@ prepare.channel.alias<-function(
     channel_alias[,N.alias:=N]
   }
   ##
-  channel_alias[!is.na(S),S_N:=paste(S,N.alias,sep = "_")]
-  channel_alias[is.na(S_N),S_N:=N.alias]
-  channel_alias[is.na(S_N),S_N:=N]
+  if('S' %in% names(channel_alias)){
+    channel_alias[!is.na(S),S_N:=paste(S,N.alias,sep = "_")]
+    channel_alias[is.na(S_N),S_N:=N.alias]
+    channel_alias[is.na(S_N),S_N:=N]
+  }
   ##
   if(natural.order){
     channel_alias<-channel_alias[stringr::str_order(S_N,numeric = T)]
@@ -75,6 +81,7 @@ prepare.channel.alias<-function(
 #' \itemize{
 #'   \item `"S_N"` -- parameter columns are named by combining $PS and $PN, separated by an underscore. For Cytek Aurora instruments using SpectroFlo software, the default parameter naming scheme is as follows: $PS = stain (marker); $PN = detector/fluorophore.
 #'   \item `"S"` -- parameter columns are named by using only their respective $PS keyword value.
+#'   \item `"N"` -- parameter columns are named by using only their respective $PN keyword value.
 #' }
 #' @param cofactor Numeric; default `5000`. Any/all parameters with a `$PnTYPE` of 'Unmixed_Fluorescence' will be transformed using \link{asinh} and the defined cofactor value (`asinh(x/cofactor)`).
 #' @param sample.id Character string; the keyword label defined through `sample.id` (default `TUBENAME`) will be used to add respective keyword values as an identifier to the `data.table`.
@@ -111,7 +118,7 @@ read.fcs.to.dt<-function(
     fcs.file.paths,
     colnames.syntatically.valid=TRUE,
     natural.order=TRUE,
-    colnames.type=c("S","S_N"),
+    colnames.type=c("S","S_N","N"),
     cofactor=5000,
     sample.id='TUBENAME',
     keywords.to.factor=NULL
@@ -134,6 +141,9 @@ read.fcs.to.dt<-function(
   }else if(ctype=='S'){
     ca<-channel_alias[,.(channels=N,alias=S)]
     ca[is.na(alias),alias:=channel_alias[N %in% ca[is.na(alias),channels],S_N]]
+  }else if(ctype=='N'){
+    ca<-channel_alias[,.(channels=N,alias=N.alias)]
+    ca[is.na(alias),alias:=channels]
   }
   ##
   keywords$parameters<-merge(keywords$parameters,ca[,.(N=channels,alias)],sort = F)
@@ -156,10 +166,11 @@ read.fcs.to.dt<-function(
   }
   ##
   if(!is.null(cofactor)){
-    cols.transform<-keywords$parameters[TYPE=="Unmixed_Fluorescence",unique(alias)]
+    cols.transform<-keywords$parameters[grep("Raw|Unmixed_Fluorescence",TYPE),unique(alias)]
     for(j in cols.transform){
       data.table::set(dt,j=j,value = asinh(dt[[j]]/cofactor))
     }
+    keywords$parameters[alias %in% cols.transform,c('transform','cofactor'):=list('asinh',5000)]
   }
   ##
   data.table::set(

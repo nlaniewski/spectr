@@ -166,8 +166,12 @@ get.keywords<-function(fcs.file.paths){
     lapply(split(dt.parameters,by='PROJ'),function(dt.proj){
       dt<-unique(dt.proj)
       non.unique.par<-dt[,which(.N>1),by=par][,par]
-      NR<-unique(dt[par %in% non.unique.par,if(length(unique(N))==1){.(N,R=max(R))}])
-      dt[-dt[,.I[N %in% NR[['N']]&R!=NR[['R']]]]][order(as.integer(gsub("\\D+","",par)))]
+      if(length(non.unique.par)>0){
+        NR<-unique(dt[par %in% non.unique.par,if(length(unique(N))==1){.(N,R=max(R))}])
+        dt[-dt[,.I[N %in% NR[['N']]&R!=NR[['R']]]]][order(as.integer(gsub("\\D+","",par)))]
+      }else{
+        dt[]
+      }
     })
   )
   ##non-parameter keywords for each file; list
@@ -177,6 +181,9 @@ get.keywords<-function(fcs.file.paths){
   ##spill for each file; list
   ##unique 'spill.mats'; by 'PROJ'
   spill.mats<-unique(get.spill(keywords.text))
+  if(length(spill.mats)==1){
+    spill.mats<-spill.mats[[1]]
+  }
   ##return
   list(
     parameters=dt.parameters,

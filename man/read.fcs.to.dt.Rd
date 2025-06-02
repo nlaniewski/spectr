@@ -8,7 +8,7 @@ read.fcs.to.dt(
   fcs.file.paths,
   colnames.syntatically.valid = TRUE,
   natural.order = TRUE,
-  colnames.type = c("S", "S_N"),
+  colnames.type = c("S", "S_N", "N"),
   cofactor = 5000,
   sample.id = "TUBENAME",
   keywords.to.factor = NULL
@@ -25,6 +25,7 @@ read.fcs.to.dt(
 \itemize{
 \item \code{"S_N"} -- parameter columns are named by combining $PS and $PN, separated by an underscore. For Cytek Aurora instruments using SpectroFlo software, the default parameter naming scheme is as follows: $PS = stain (marker); $PN = detector/fluorophore.
 \item \code{"S"} -- parameter columns are named by using only their respective $PS keyword value.
+\item \code{"N"} -- parameter columns are named by using only their respective $PN keyword value.
 }}
 
 \item{cofactor}{Numeric; default \code{5000}. Any/all parameters with a \verb{$PnTYPE} of 'Unmixed_Fluorescence' will be transformed using \link{asinh} and the defined cofactor value (\code{asinh(x/cofactor)}).}
