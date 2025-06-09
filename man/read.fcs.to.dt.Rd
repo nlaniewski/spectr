@@ -28,7 +28,7 @@ read.fcs.to.dt(
 \item \code{"N"} -- parameter columns are named by using only their respective $PN keyword value.
 }}
 
-\item{cofactor}{Numeric; default \code{5000}. Any/all parameters with a \verb{$PnTYPE} of 'Unmixed_Fluorescence' will be transformed using \link{asinh} and the defined cofactor value (\code{asinh(x/cofactor)}).}
+\item{cofactor}{Numeric; default \code{5000}. Any/all parameters with a \verb{$PnTYPE} of 'Raw_Fluorescence' or 'Unmixed_Fluorescence' will be transformed using \link{asinh} and the defined cofactor value (\code{asinh(x/cofactor)}).}
 
 \item{sample.id}{Character string; the keyword label defined through \code{sample.id} (default \code{TUBENAME}) will be used to add respective keyword values as an identifier to the \code{data.table}.}
 

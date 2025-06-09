@@ -24,7 +24,7 @@ get.keywords.text<-function(fcs.file.paths){
 #' @noRd
 #' @title Get a data.table of keyword parameters ("$P|P")
 #' @param keywords.text The return of `get.keywords.text(...)`.
-#' @param add.PROJ.identifier Logical; default `TRUE`. An additional column ('$PROJ') is added to the returned data.table.
+#' @param add.PROJ.identifier Logical; default `TRUE`. An additional column ('$PROJ') is added to the returned data.table; if '$PROJ' is not found, then '$DATE' will be used instead as an identifier.
 get.dt.parameters<-function(keywords.text,add.PROJ.identifier=TRUE){
   #using the return of 'get.keywords.text(...)'
   lapply(keywords.text,function(kw){
@@ -42,9 +42,13 @@ get.dt.parameters<-function(keywords.text,add.PROJ.identifier=TRUE){
       par.i<-as.integer(gsub("\\D+","",names(par.vec)))
       data.table::set(dt.parameters,i=par.i,j=j,value = par.vec)
     }
-    ##add '$PROJ' identifier
+    ##add '$PROJ' identifier; if not found, use '$DATE' instead
     if(add.PROJ.identifier){
-      dt.parameters[,PROJ:=as.factor(kw[['parameters.non']][['$PROJ']])]
+      if(!'$PROJ' %in% names(keywords.text[[2]]$parameters.non)){
+        dt.parameters[,PROJ:=as.factor(kw[['parameters.non']][['$DATE']])]
+      }else{
+        dt.parameters[,PROJ:=as.factor(kw[['parameters.non']][['$PROJ']])]
+      }
     }
     ##return the data.table
     dt.parameters[]
@@ -73,31 +77,37 @@ get.dt.parameters.non<-function(keywords.text,drop.primary=TRUE,drop.spill=TRUE)
   })
 }
 get.spill<-function(keywords.text,add.PROJ.identifier=TRUE){
-  #using the return of 'get.keywords.text(...)'
-  lapply(keywords.text,function(kw){
-    spill.name<-grep('spill',names(kw[['parameters.non']]),ignore.case = T,value = T)
-    spillover.string<-kw[['parameters.non']][[spill.name]]
-    ##from flowCore:::txt2spillmatrix
-    spill.split <- strsplit(spillover.string, ",")[[1]]
-    N.cols <- as.numeric(spill.split[1])
-    if(!is.na(N.cols)&&N.cols>0){
-      col.names <- spill.split[2:(N.cols + 1)]
-      vals<-as.numeric(spill.split[(N.cols+2):length(spill.split)])
-      spill.mat<-matrix(
-        data = vals,
-        ncol = N.cols,
-        byrow = TRUE,
-        dimnames = list(NULL,col.names)
-      )
-      if(add.PROJ.identifier){
-        attr(spill.mat,'PROJ')<-kw[['parameters.non']][['$PROJ']]
-        return(spill.mat)
-      }
-      return(spill.mat)
-    }else{
-      stop("'spillover.string' cannot be parsed.")
-    }
+  ##test for spill
+  spill.text<-sapply(keywords.text,function(kw){
+    grep('spill',names(kw[['parameters.non']]),ignore.case = T,value = T)
   })
+  if(!all(sapply(spill.text,length)==0)){
+    #using the return of 'get.keywords.text(...)'
+    lapply(keywords.text,function(kw){
+      spill.name<-grep('spill',names(kw[['parameters.non']]),ignore.case = T,value = T)
+      spillover.string<-kw[['parameters.non']][[spill.name]]
+      ##from flowCore:::txt2spillmatrix
+      spill.split <- strsplit(spillover.string, ",")[[1]]
+      N.cols <- as.numeric(spill.split[1])
+      if(!is.na(N.cols)&&N.cols>0){
+        col.names <- spill.split[2:(N.cols + 1)]
+        vals<-as.numeric(spill.split[(N.cols+2):length(spill.split)])
+        spill.mat<-matrix(
+          data = vals,
+          ncol = N.cols,
+          byrow = TRUE,
+          dimnames = list(NULL,col.names)
+        )
+        if(add.PROJ.identifier){
+          attr(spill.mat,'PROJ')<-kw[['parameters.non']][['$PROJ']]
+          return(spill.mat)
+        }
+        return(spill.mat)
+      }else{
+        stop("'spillover.string' cannot be parsed.")
+      }
+    })
+  }
 }
 #' @title Get keywords from .fcs file(s)
 #' @description
@@ -166,12 +176,7 @@ get.keywords<-function(fcs.file.paths){
     lapply(split(dt.parameters,by='PROJ'),function(dt.proj){
       dt<-unique(dt.proj)
       non.unique.par<-dt[,which(.N>1),by=par][,par]
-      if(length(non.unique.par)>0){
-        NR<-unique(dt[par %in% non.unique.par,if(length(unique(N))==1){.(N,R=max(R))}])
-        dt[-dt[,.I[N %in% NR[['N']]&R!=NR[['R']]]]][order(as.integer(gsub("\\D+","",par)))]
-      }else{
-        dt[]
-      }
+      dt<-dt[dt[,.I[which.max(R)],by=par][[2]]]
     })
   )
   ##non-parameter keywords for each file; list

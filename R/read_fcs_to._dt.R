@@ -38,6 +38,8 @@ concatenate.test<-function(fcs.file.paths){
   if('S' %in% names(dt.NS)){
     if(dt.NS[!is.na(S),data.table::uniqueN(S)!=.N]){
       stop("Non-unique '$PS' names")
+    }else{
+      return(keywords)
     }
   }else{
     return(keywords)
@@ -83,7 +85,7 @@ prepare.channel.alias<-function(
 #'   \item `"S"` -- parameter columns are named by using only their respective $PS keyword value.
 #'   \item `"N"` -- parameter columns are named by using only their respective $PN keyword value.
 #' }
-#' @param cofactor Numeric; default `5000`. Any/all parameters with a `$PnTYPE` of 'Unmixed_Fluorescence' will be transformed using \link{asinh} and the defined cofactor value (`asinh(x/cofactor)`).
+#' @param cofactor Numeric; default `5000`. Any/all parameters with a `$PnTYPE` of 'Raw_Fluorescence' or 'Unmixed_Fluorescence' will be transformed using \link{asinh} and the defined cofactor value (`asinh(x/cofactor)`).
 #' @param sample.id Character string; the keyword label defined through `sample.id` (default `TUBENAME`) will be used to add respective keyword values as an identifier to the `data.table`.
 #' @param keywords.to.factor Character string; if defined, keywords will be coerced to factor and appended to the returned data.table as factored columns.
 #'
@@ -124,8 +126,6 @@ read.fcs.to.dt<-function(
     keywords.to.factor=NULL
     # return.list=FALSE,
 ){
-  ##to silence NSE R CMD check notes
-
   ##
   keywords<-concatenate.test(fcs.file.paths)
   ##
@@ -166,18 +166,27 @@ read.fcs.to.dt<-function(
   }
   ##
   if(!is.null(cofactor)){
-    cols.transform<-keywords$parameters[grep("Raw|Unmixed_Fluorescence",TYPE),unique(alias)]
+    if(all(c('Event_length','Residual') %in% keywords$parameters$N)){
+      ##mass cyto
+      cols.transform<-keywords$parameters[grep("Di",N),unique(alias)]
+    }else{
+      ##Cytek Aurora; spectral
+      cols.transform<-keywords$parameters[grep("Raw|Unmixed_Fluorescence",TYPE),unique(alias)]
+    }
     for(j in cols.transform){
       data.table::set(dt,j=j,value = asinh(dt[[j]]/cofactor))
     }
-    keywords$parameters[alias %in% cols.transform,c('transform','cofactor'):=list('asinh',5000)]
+    keywords$parameters[alias %in% cols.transform,c('transform','cofactor'):=list('asinh',cofactor)]
   }
   ##
+  if(!sample.id %in% names(keywords$parameters.non)){
+    sample.id<-'$FIL'
+  }
   data.table::set(
     dt,
     j='sample.id',
     value=as.factor(
-      keywords$parameters.non[,rep(j,as.numeric(`$TOT`)),
+      keywords$parameters.non[,rep(sub(".fcs","",j),as.numeric(`$TOT`)),
         env = list(j = sample.id)])
   )
   ##
